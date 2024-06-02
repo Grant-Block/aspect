@@ -21,6 +21,7 @@
 #include <aspect/material_model/reactive_fluid_transport.h>
 #include <aspect/simulator_access.h>
 #include <aspect/adiabatic_conditions/interface.h>
+#include <aspect/gravity_model/interface.h>
 #include <aspect/utilities.h>
 #include <aspect/geometry_model/interface.h>
 #include <deal.II/base/parameter_handler.h>
@@ -246,21 +247,21 @@ namespace aspect
                   if (this->include_adiabatic_heating ())
                     {
                       // temperature dependence is 1 - alpha * (T - T(adiabatic))
-                      temperature_dependence -= (in.temperature[i] - this->get_adiabatic_conditions().temperature(in.position[i]))
+                      temperature_dependence -= (in.temperature[q] - this->get_adiabatic_conditions().temperature(in.position[q]))
                                                 * thermal_expansivity;
                     }
                   else
-                    temperature_dependence -= (in.temperature[i] - reference_T) * thermal_expansivity;
+                    temperature_dependence -= (in.temperature[q] - reference_T) * thermal_expansivity;
                 
                   // the fluid compressibility includes two parts, a constant compressibility, and a pressure-dependent one
                   // this is a simplified formulation, experimental data are often fit to the Birch-Murnaghan equation of state
-                  const double fluid_compressibility_pressure = fluid_compressibility / (1.0 + in.pressure[i] * fluid_bulk_modulus_derivative * fluid_compressibility_pressure);
-                  fluid_out->fluid_densities[i] = reference_rho_f * std::exp(fluid_compressibility_pressure * (in.pressure[i] - this->get_surface_pressure()))
+                  const double fluid_compressibility_pressure = fluid_compressibility / (1.0 + in.pressure[q] * fluid_bulk_modulus_derivative * fluid_compressibility);
+                  fluid_out->fluid_densities[q] = reference_rho_f * std::exp(fluid_compressibility_pressure * (in.pressure[q] - this->get_surface_pressure()))
                                              * temperature_dependence;
 
-                  fluid_out->fluid_density_gradients[i] = melt_out->fluid_densities[i] * melt_out->fluid_densities[i]
+                  fluid_out->fluid_density_gradients[q] = fluid_out->fluid_densities[q] * fluid_out->fluid_densities[q]
                                                         * fluid_compressibility_pressure
-                                                        * this->get_gravity_model().gravity_vector(in.position[i]);
+                                                        * this->get_gravity_model().gravity_vector(in.position[q]);
                 }else
                    fluid_out->fluid_densities[q] = reference_rho_f * std::exp(fluid_compressibility * (in.pressure[q] - this->get_surface_pressure()));
 
@@ -277,12 +278,12 @@ namespace aspect
                       double visc_temperature_dependence = 1.0;
                       if (this->include_adiabatic_heating ())
                         {
-                          const double delta_temp = in.temperature[i]-this->get_adiabatic_conditions().temperature(in.position[i]);
-                          visc_temperature_dependence = std::max(std::min(std::exp(-thermal_bulk_viscosity_exponent*delta_temp/this->get_adiabatic_conditions().temperature(in.position[i])),1e4),1e-4);
+                          const double delta_temp = in.temperature[q]-this->get_adiabatic_conditions().temperature(in.position[q]);
+                          visc_temperature_dependence = std::max(std::min(std::exp(-thermal_bulk_viscosity_exponent*delta_temp/this->get_adiabatic_conditions().temperature(in.position[q])),1e4),1e-4);
                         }
                       else
                         {
-                          const double delta_temp = in.temperature[i]-reference_T;
+                          const double delta_temp = in.temperature[q]-reference_T;
                           const double T_dependence = (thermal_bulk_viscosity_exponent == 0.0
                                                       ?
                                                       0.0
@@ -290,7 +291,7 @@ namespace aspect
                                                       thermal_bulk_viscosity_exponent*delta_temp/reference_T);
                           visc_temperature_dependence = std::max(std::min(std::exp(-T_dependence),1e4),1e-4);
                         }
-                      melt_out->compaction_viscosities[i] *= visc_temperature_dependence;
+                      fluid_out->compaction_viscosities[q] *= visc_temperature_dependence;
                     }
                 }
             }
@@ -319,11 +320,18 @@ namespace aspect
                     const unsigned int bound_fluid_idx = this->introspection().compositional_index_for_name("bound_fluid");
                     if (c == bound_fluid_idx && this->get_timestep_number() > 0)
                       reaction_rate_out->reaction_rates[q][c] = - porosity_change / fluid_reaction_time_scale;
+                    else if (c == porosity_idx && this->get_timestep_number() > 0)
+                      reaction_rate_out->reaction_rates[q][c] = porosity_change / fluid_reaction_time_scale;
+                    else
+                      reaction_rate_out->reaction_rates[q][c] = 0.0;
                   }
-                else if (c == porosity_idx && this->get_timestep_number() > 0)
-                  reaction_rate_out->reaction_rates[q][c] = porosity_change / fluid_reaction_time_scale;
                 else
-                  reaction_rate_out->reaction_rates[q][c] = 0.0;
+                  {
+                    if (c == porosity_idx && this->get_timestep_number() > 0)
+                      reaction_rate_out->reaction_rates[q][c] = porosity_change / fluid_reaction_time_scale;
+                    else
+                      reaction_rate_out->reaction_rates[q][c] = 0.0;
+                  }
               }
         }
     }
@@ -409,11 +417,25 @@ namespace aspect
                              "use polynomials to describe hydration and dehydration reactions for four different "
                              "rock compositions as defined in Tian et al., 2019, or the Katz et. al. 2003 mantle "
                              "melting model.");
-           prm.declare_entry ("Fluid bulk modulus derivative", "0.0",
+          prm.declare_entry ("Fluid bulk modulus derivative", "0.0",
                              Patterns::Double (0.),
                              "The value of the pressure derivative of the fluid bulk "
                              "modulus. "
                              "Units: None.");
+          prm.declare_entry ("Thermal expansion coefficient", "2e-5",
+                             Patterns::Double (0.),
+                             "The value of the thermal expansion coefficient $\\beta$. "
+                             "Units: \\si{\\per\\kelvin}.");
+          prm.declare_entry ("Reference temperature", "293.",
+                             Patterns::Double (0.),
+                             "The reference temperature $T_0$. The reference temperature is used "
+                             "in both the density and viscosity formulas. Units: \\si{\\kelvin}.");
+          prm.declare_entry ("Thermal bulk viscosity exponent", "0.0",
+                             Patterns::Double (0.),
+                             "The temperature dependence of the bulk viscosity. Dimensionless exponent. "
+                             "See the general documentation "
+                             "of this model for a formula that states the dependence of the "
+                             "viscosity on this factor, which is called $\\beta$ there.");
 
           // read in melting model parameters
           ReactionModel::Katz2003MantleMelting<dim>::declare_parameters(prm);
@@ -450,6 +472,9 @@ namespace aspect
           tian_max_sediment_water           = prm.get_double ("Maximum weight percent water in sediment");
 
           fluid_bulk_modulus_derivative     = prm.get_double ("Melt bulk modulus derivative");
+          thermal_expansivity               = prm.get_double ("Thermal expansion coefficient");
+          reference_T                       = prm.get_double ("Reference temperature");
+          thermal_bulk_viscosity_exponent = prm.get_double ("Thermal bulk viscosity exponent");
 
           // Create the base model and initialize its SimulatorAccess base
           // class; it will get a chance to read its parameters below after we
