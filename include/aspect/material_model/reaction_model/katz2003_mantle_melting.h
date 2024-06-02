@@ -89,6 +89,26 @@ namespace aspect
                           const double pressure,
                           const double maximum_melt_fraction,
                           const NonlinearDependence::Dependence dependence) const;
+
+          
+          /**
+           * Compute all the reaction rate variables needed for a reactive transport model based on the 
+           * Katz 2003 formulation. Takes @p model inputs and @p model outputs to return, as well as 
+           * @p access to the model variables. 
+          */
+          void calculate_reaction_rate_outputs(const typename Interface<dim>::MaterialModelInputs &in,
+                                               typename Interface<dim>::MaterialModelOutputs &out,
+                                               const typename SimulatorAccess<dim>MaterialModel &model) const override;
+
+          /**
+           * Compute all the fluid variables needed for a reactive transport model based on the 
+           * Katz 2003 formulation. Takes @p model inputs and @p model outputs to return, as well as 
+           * @p access to the model variables. 
+          */
+          void calculate_fluid_outputs(const typename Interface<dim>::MaterialModelInputs &in,
+                                       typename Interface<dim>::MaterialModelOutputs &out,
+                                       const typename SimulatorAccess<dim>MaterialModel &model) const override;
+
         private:
           /**
           * Parameters for anhydrous melting of peridotite after Katz, 2003
