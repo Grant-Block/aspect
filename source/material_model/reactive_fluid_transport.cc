@@ -238,7 +238,31 @@ namespace aspect
               fluid_out->fluid_viscosities[q] = eta_f;
               fluid_out->permeabilities[q] = reference_permeability * std::pow(porosity,3) * std::pow(1.0-porosity,2);
 
-              fluid_out->fluid_densities[q] = reference_rho_f * std::exp(fluid_compressibility * (in.pressure[q] - this->get_surface_pressure()));
+              double temperature_dependence; 
+              if (fluid_solid_reaction_scheme == katz2003)
+                {
+                  // first, calculate temperature dependence of density
+                  temperature_dependence = 1.0;
+                  if (this->include_adiabatic_heating ())
+                    {
+                      // temperature dependence is 1 - alpha * (T - T(adiabatic))
+                      temperature_dependence -= (in.temperature[i] - this->get_adiabatic_conditions().temperature(in.position[i]))
+                                                * thermal_expansivity;
+                    }
+                  else
+                    temperature_dependence -= (in.temperature[i] - reference_T) * thermal_expansivity;
+                
+                  // the fluid compressibility includes two parts, a constant compressibility, and a pressure-dependent one
+                  // this is a simplified formulation, experimental data are often fit to the Birch-Murnaghan equation of state
+                  const double fluid_compressibility_pressure = fluid_compressibility / (1.0 + in.pressure[i] * fluid_bulk_modulus_derivative * fluid_compressibility_pressure);
+                  fluid_out->fluid_densities[i] = reference_rho_f * std::exp(fluid_compressibility_pressure * (in.pressure[i] - this->get_surface_pressure()))
+                                             * temperature_dependence;
+
+                  fluid_out->fluid_density_gradients[i] = melt_out->fluid_densities[i] * melt_out->fluid_densities[i]
+                                                        * fluid_compressibility_pressure
+                                                        * this->get_gravity_model().gravity_vector(in.position[i]);
+                }else
+                   fluid_out->fluid_densities[q] = reference_rho_f * std::exp(fluid_compressibility * (in.pressure[q] - this->get_surface_pressure()));
 
               if (in.requests_property(MaterialProperties::viscosity))
                 {
@@ -248,6 +272,26 @@ namespace aspect
                   // calculating fluid effects on viscosities.
                   porosity = std::max(porosity,1e-8);
                   fluid_out->compaction_viscosities[q] = out.viscosities[q] * shear_to_bulk_viscosity_ratio * phi_0/porosity;
+                  if (fluid_solid_reaction_scheme == katz2003)
+                    {
+                      double visc_temperature_dependence = 1.0;
+                      if (this->include_adiabatic_heating ())
+                        {
+                          const double delta_temp = in.temperature[i]-this->get_adiabatic_conditions().temperature(in.position[i]);
+                          visc_temperature_dependence = std::max(std::min(std::exp(-thermal_bulk_viscosity_exponent*delta_temp/this->get_adiabatic_conditions().temperature(in.position[i])),1e4),1e-4);
+                        }
+                      else
+                        {
+                          const double delta_temp = in.temperature[i]-reference_T;
+                          const double T_dependence = (thermal_bulk_viscosity_exponent == 0.0
+                                                      ?
+                                                      0.0
+                                                      :
+                                                      thermal_bulk_viscosity_exponent*delta_temp/reference_T);
+                          visc_temperature_dependence = std::max(std::min(std::exp(-T_dependence),1e4),1e-4);
+                        }
+                      melt_out->compaction_viscosities[i] *= visc_temperature_dependence;
+                    }
                 }
             }
         }
@@ -365,6 +409,11 @@ namespace aspect
                              "use polynomials to describe hydration and dehydration reactions for four different "
                              "rock compositions as defined in Tian et al., 2019, or the Katz et. al. 2003 mantle "
                              "melting model.");
+           prm.declare_entry ("Fluid bulk modulus derivative", "0.0",
+                             Patterns::Double (0.),
+                             "The value of the pressure derivative of the fluid bulk "
+                             "modulus. "
+                             "Units: None.");
 
           // read in melting model parameters
           ReactionModel::Katz2003MantleMelting<dim>::declare_parameters(prm);
@@ -399,6 +448,8 @@ namespace aspect
           tian_max_gabbro_water             = prm.get_double ("Maximum weight percent water in gabbro");
           tian_max_MORB_water               = prm.get_double ("Maximum weight percent water in MORB");
           tian_max_sediment_water           = prm.get_double ("Maximum weight percent water in sediment");
+
+          fluid_bulk_modulus_derivative     = prm.get_double ("Melt bulk modulus derivative");
 
           // Create the base model and initialize its SimulatorAccess base
           // class; it will get a chance to read its parameters below after we
@@ -483,6 +534,13 @@ namespace aspect
               AssertThrow(this->introspection().compositional_name_exists("bound_fluid"),
                           ExcMessage("Material model Reactive Fluid Transport only "
                                      "works if there is a compositional field called bound_fluid."));
+            }
+          else
+            {
+              AssertThrow(this->introspection().compositional_name_exists("peridotite"),
+                          ExcMessage("Material model Reactive Fluid Transport only "
+                                     "works with the katz2003 model if there is a compositional "
+                                     "field called peridotite."));
             }
         }
         prm.leave_subsection();

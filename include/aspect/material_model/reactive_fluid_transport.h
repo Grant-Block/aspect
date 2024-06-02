@@ -139,6 +139,7 @@ namespace aspect
         double reference_rho_f;
         double eta_f;
         double fluid_compressibility;
+        double fluid_bulk_modulus_derivitive;
 
         // Material properties governing the transport of the fluid with respect
         // to the solid, i.e., the bulk viscosity (relative to the shear viscosity),
