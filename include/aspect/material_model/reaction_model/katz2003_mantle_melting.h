@@ -93,26 +93,49 @@ namespace aspect
           
           /**
            * Compute all the reaction rate variables needed for a reactive transport model based on the 
-           * Katz 2003 formulation. Takes @p model inputs and @p model outputs to return, as well as 
-           * @p access to the model variables. 
+           * Katz 2003 formulation. Takes @p model inputs and @p model outputs to return. 
           */
           void calculate_reaction_rate_outputs(const typename Interface<dim>::MaterialModelInputs &in,
-                                               typename Interface<dim>::MaterialModelOutputs &out,
-                                               const typename MaterialModel::MeltInterface<dim> &model) const;
+                                               typename Interface<dim>::MaterialModelOutputs &out) const;
 
           /**
            * Compute all the fluid variables needed for a reactive transport model based on the 
-           * Katz 2003 formulation. Takes @p model inputs and @p model outputs to return, as well as 
-           * @p access to the model variables. 
+           * Katz 2003 formulation. Takes @p model inputs and @p model outputs to return. 
           */
           void calculate_fluid_outputs(const typename Interface<dim>::MaterialModelInputs &in,
-                                       typename Interface<dim>::MaterialModelOutputs &out,
-                                       const typename MaterialModel::MeltInterface<dim> &model) const;
+                                       typename Interface<dim>::MaterialModelOutputs &out) const;
+
+          double get_reference_permeability() const;
+
+          double get_eta_f() const;
 
         private:
           /**
           * Parameters for anhydrous melting of peridotite after Katz, 2003
           */
+
+          double reference_rho_s;
+          double reference_rho_f;
+          double reference_T;
+          double eta_0;
+          double xi_0;
+          double eta_f;
+          double thermal_viscosity_exponent;
+          double thermal_bulk_viscosity_exponent;
+          double thermal_expansivity;
+          double reference_specific_heat;
+          double thermal_conductivity;
+          double alpha_phi;
+          double extraction_depth;
+          double compressibility;
+          double melt_compressibility;
+          double melt_bulk_modulus_derivative;
+          double depletion_density_change;
+          double depletion_solidus_change;
+          bool fractional_melting;
+          double freezing_rate;
+          double melting_time_scale;
+          double reference_permeability;
 
           // for the solidus temperature
           double A1;   // °C
