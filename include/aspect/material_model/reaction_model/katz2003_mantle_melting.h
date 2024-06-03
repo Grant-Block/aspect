@@ -98,7 +98,7 @@ namespace aspect
           */
           void calculate_reaction_rate_outputs(const typename Interface<dim>::MaterialModelInputs &in,
                                                typename Interface<dim>::MaterialModelOutputs &out,
-                                               const typename SimulatorAccess<dim>MaterialModel &model) const override;
+                                               const typename MaterialModel::MeltInterface<dim> &model) const;
 
           /**
            * Compute all the fluid variables needed for a reactive transport model based on the 
@@ -107,7 +107,7 @@ namespace aspect
           */
           void calculate_fluid_outputs(const typename Interface<dim>::MaterialModelInputs &in,
                                        typename Interface<dim>::MaterialModelOutputs &out,
-                                       const typename SimulatorAccess<dim>MaterialModel &model) const override;
+                                       const typename MaterialModel::MeltInterface<dim> &model) const;
 
         private:
           /**

@@ -139,16 +139,6 @@ namespace aspect
         double reference_rho_f;
         double eta_f;
         double fluid_compressibility;
-        double fluid_bulk_modulus_derivative;
-        double thermal_expansivity;
-        double reference_T;
-        double thermal_bulk_viscosity_exponent;
-        double depletion_density_change;
-        double depletion_solidus_change;
-        bool fractional_melting;
-        double freezing_rate;
-        double extraction_depth;
-        double eta_0;
 
         // Material properties governing the transport of the fluid with respect
         // to the solid, i.e., the bulk viscosity (relative to the shear viscosity),
