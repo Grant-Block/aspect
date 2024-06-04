@@ -11,7 +11,8 @@ set Dimension                              = 2
 
 # The end time of the simulation. Units: years if the 'Use years in output
 # instead of seconds' parameter is set; seconds otherwise.
-set End time                               = 1000
+set End time                               = 10000
+set Maximum time step                      = 5e2
 set Pressure normalization                 = surface
 set Use years in output instead of seconds = true
 set Output directory                       = output-vp-melt-transport
@@ -50,6 +51,28 @@ subsection Gravity model
   end
 end
 
+subsection Melt settings
+  set Include melt transport = true
+end
+
+set Use operator splitting                     = true
+
+subsection Solver parameters
+  subsection Operator splitting parameters
+    set Reaction time step                     = 50
+
+    # Additionally, we always want to do at least 10 operator splitting time
+    # steps in each model time step, to accurately compute the reactions.
+    set Reaction time steps per advection step = 10
+  end
+
+  # Because this model includes strong localized viscosity contrasts we
+  # increase the robustness of the solver at the cost of memory consumption.
+  subsection Stokes solver parameters
+    set GMRES solver restart length = 200
+  end
+end
+
 subsection Compositional fields
   set Number of fields = 2
   set Names of fields = porosity, peridotite
@@ -72,7 +95,7 @@ end
 subsection Initial composition model
   set Model name = function
   subsection Function
-    set Function expression = 0
+    set Function expression = 0;1
   end
 end
 
@@ -114,7 +137,7 @@ subsection Postprocess
     subsection Visualization
       set Interpolate output = false
       set Number of grouped files       = 0
-      set Output format                 = gnuplot
+      # set Output format                 = gnuplot
       set List of output variables      = melt fraction
       set Time between graphical output = 0
     end
