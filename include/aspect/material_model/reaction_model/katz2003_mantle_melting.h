@@ -90,17 +90,17 @@ namespace aspect
                           const double maximum_melt_fraction,
                           const NonlinearDependence::Dependence dependence) const;
 
-          
+
           /**
-           * Compute all the reaction rate variables needed for a reactive transport model based on the 
-           * Katz 2003 formulation. Takes @p model inputs and @p model outputs to return. 
+           * Compute all the reaction rate variables needed for a reactive transport model based on the
+           * Katz 2003 formulation. Takes @p model inputs and @p model outputs to return.
           */
           void calculate_reaction_rate_outputs(const typename Interface<dim>::MaterialModelInputs &in,
                                                typename Interface<dim>::MaterialModelOutputs &out) const;
 
           /**
-           * Compute all the fluid variables needed for a reactive transport model based on the 
-           * Katz 2003 formulation. Takes @p model inputs and @p model outputs to return. 
+           * Compute all the fluid variables needed for a reactive transport model based on the
+           * Katz 2003 formulation. Takes @p model inputs and @p model outputs to return.
           */
           void calculate_fluid_outputs(const typename Interface<dim>::MaterialModelInputs &in,
                                        typename Interface<dim>::MaterialModelOutputs &out) const;

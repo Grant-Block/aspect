@@ -84,7 +84,7 @@ namespace aspect
     evaluate(const typename Interface<dim>::MaterialModelInputs &in, typename Interface<dim>::MaterialModelOutputs &out) const
     {
       katz2003_model.calculate_reaction_rate_outputs(in, out);
-      katz2003_model.calculate_fluid_outputs(in, out); 
+      katz2003_model.calculate_fluid_outputs(in, out);
     }
 
 
@@ -99,7 +99,7 @@ namespace aspect
           // Melt Fraction Parameters
           ReactionModel::Katz2003MantleMelting<dim>::declare_parameters(prm);
 
-          
+
           prm.declare_entry ("Use full compressibility", "false",
                              Patterns::Bool (),
                              "If the compressibility should be used everywhere in the code "
