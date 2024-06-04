@@ -22,7 +22,7 @@
 #include <aspect/material_model/melt_simple.h>
 #include <aspect/material_model/reaction_model/katz2003_mantle_melting.h>
 #include <aspect/utilities.h>
-
+#include <aspect/adiabatic_conditions/interface.h>
 #include <deal.II/base/parameter_handler.h>
 #include <deal.II/numerics/fe_field_function.h>
 
