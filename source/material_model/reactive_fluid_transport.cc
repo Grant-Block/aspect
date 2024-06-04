@@ -210,85 +210,93 @@ namespace aspect
                                           typename Interface<dim>::MaterialModelOutputs &out) const
     {
       base_model->evaluate(in,out);
-
-      const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
-
-      // Modify the viscosity from the base model based on the presence of fluid.
-      if (in.requests_property(MaterialProperties::viscosity))
+      if (fluid_solid_reaction_scheme != katz2003)
         {
-          // Scale the base model viscosity value based on the porosity.
-          for (unsigned int q=0; q<out.n_evaluation_points(); ++q)
+          const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
+
+          // Modify the viscosity from the base model based on the presence of fluid.
+          if (in.requests_property(MaterialProperties::viscosity))
             {
-              const double porosity = std::max(in.composition[q][porosity_idx],0.0);
-              out.viscosities[q] *= (1.0 - porosity) * exp(- alpha_phi * porosity);
-            }
-        }
-
-      // Fill the melt outputs if they exist. Note that the MeltOutputs class was originally
-      // designed for two-phase flow material models in ASPECT that model the flow of melt,
-      // but can be reused for a geofluid of arbitrary composition.
-      MeltOutputs<dim> *fluid_out = out.template get_additional_output<MeltOutputs<dim>>();
-
-      if (fluid_out != nullptr)
-        {
-          for (unsigned int q=0; q<out.n_evaluation_points(); ++q)
-            {
-              double porosity = std::max(in.composition[q][porosity_idx],0.0);
-
-              fluid_out->fluid_viscosities[q] = eta_f;
-              fluid_out->permeabilities[q] = reference_permeability * std::pow(porosity,3) * std::pow(1.0-porosity,2);
-
-              fluid_out->fluid_densities[q] = reference_rho_f * std::exp(fluid_compressibility * (in.pressure[q] - this->get_surface_pressure()));
-
-              if (in.requests_property(MaterialProperties::viscosity))
+              // Scale the base model viscosity value based on the porosity.
+              for (unsigned int q=0; q<out.n_evaluation_points(); ++q)
                 {
-                  const double phi_0 = 0.05;
-
-                  // Limit the porosity to be no smaller than 1e-8 when
-                  // calculating fluid effects on viscosities.
-                  porosity = std::max(porosity,1e-8);
-                  fluid_out->compaction_viscosities[q] = out.viscosities[q] * shear_to_bulk_viscosity_ratio * phi_0/porosity;
+                  const double porosity = std::max(in.composition[q][porosity_idx],0.0);
+                  out.viscosities[q] *= (1.0 - porosity) * exp(- alpha_phi * porosity);
                 }
             }
+
+          // Fill the melt outputs if they exist. Note that the MeltOutputs class was originally
+          // designed for two-phase flow material models in ASPECT that model the flow of melt,
+          // but can be reused for a geofluid of arbitrary composition.
+          MeltOutputs<dim> *fluid_out = out.template get_additional_output<MeltOutputs<dim>>();
+
+          if (fluid_out != nullptr)
+            {
+              for (unsigned int q=0; q<out.n_evaluation_points(); ++q)
+                {
+                  double porosity = std::max(in.composition[q][porosity_idx],0.0);
+
+                  fluid_out->fluid_viscosities[q] = eta_f;
+                  fluid_out->permeabilities[q] = reference_permeability * std::pow(porosity,3) * std::pow(1.0-porosity,2);
+
+                  fluid_out->fluid_densities[q] = reference_rho_f * std::exp(fluid_compressibility * (in.pressure[q] - this->get_surface_pressure()));
+
+                  if (in.requests_property(MaterialProperties::viscosity))
+                    {
+                      const double phi_0 = 0.05;
+
+                      // Limit the porosity to be no smaller than 1e-8 when
+                      // calculating fluid effects on viscosities.
+                      porosity = std::max(porosity,1e-8);
+                      fluid_out->compaction_viscosities[q] = out.viscosities[q] * shear_to_bulk_viscosity_ratio * phi_0/porosity;
+                    }
+                }
+            }
+
+          ReactionRateOutputs<dim> *reaction_rate_out = out.template get_additional_output<ReactionRateOutputs<dim>>();
+
+          // Fill reaction rate outputs if the model uses operator splitting.
+          // Specifically, change the porosity (representing the amount of free water)
+          // based on the water solubility and the water content.
+          if (this->get_parameters().use_operator_splitting && reaction_rate_out != nullptr)
+            {
+              std::vector<double> eq_free_fluid_fractions(out.n_evaluation_points());
+              melt_fractions(in, eq_free_fluid_fractions);
+
+              for (unsigned int q=0; q<out.n_evaluation_points(); ++q)
+                for (unsigned int c=0; c<in.composition[q].size(); ++c)
+                  {
+                    double porosity_change = eq_free_fluid_fractions[q] - in.composition[q][porosity_idx];
+                    // do not allow negative porosity
+                    if (in.composition[q][porosity_idx] + porosity_change < 0)
+                      porosity_change = -in.composition[q][porosity_idx];
+
+                    if (fluid_solid_reaction_scheme != katz2003)
+                      {
+                        const unsigned int bound_fluid_idx = this->introspection().compositional_index_for_name("bound_fluid");
+                        if (c == bound_fluid_idx && this->get_timestep_number() > 0)
+                          reaction_rate_out->reaction_rates[q][c] = - porosity_change / fluid_reaction_time_scale;
+                        else if (c == porosity_idx && this->get_timestep_number() > 0)
+                          reaction_rate_out->reaction_rates[q][c] = porosity_change / fluid_reaction_time_scale;
+                        else
+                          reaction_rate_out->reaction_rates[q][c] = 0.0;
+                      }
+                    else
+                      {
+                        if (c == porosity_idx && this->get_timestep_number() > 0)
+                          reaction_rate_out->reaction_rates[q][c] = porosity_change / fluid_reaction_time_scale;
+                        else
+                          reaction_rate_out->reaction_rates[q][c] = 0.0;
+                      }
+
+                  }
+            }
+
         }
-
-      ReactionRateOutputs<dim> *reaction_rate_out = out.template get_additional_output<ReactionRateOutputs<dim>>();
-
-      // Fill reaction rate outputs if the model uses operator splitting.
-      // Specifically, change the porosity (representing the amount of free water)
-      // based on the water solubility and the water content.
-      if (this->get_parameters().use_operator_splitting && reaction_rate_out != nullptr)
+      else
         {
-          std::vector<double> eq_free_fluid_fractions(out.n_evaluation_points());
-          melt_fractions(in, eq_free_fluid_fractions);
-
-          for (unsigned int q=0; q<out.n_evaluation_points(); ++q)
-            for (unsigned int c=0; c<in.composition[q].size(); ++c)
-              {
-                double porosity_change = eq_free_fluid_fractions[q] - in.composition[q][porosity_idx];
-                // do not allow negative porosity
-                if (in.composition[q][porosity_idx] + porosity_change < 0)
-                  porosity_change = -in.composition[q][porosity_idx];
-
-                if (fluid_solid_reaction_scheme != katz2003)
-                  {
-                    const unsigned int bound_fluid_idx = this->introspection().compositional_index_for_name("bound_fluid");
-                    if (c == bound_fluid_idx && this->get_timestep_number() > 0)
-                      reaction_rate_out->reaction_rates[q][c] = - porosity_change / fluid_reaction_time_scale;
-                    else if (c == porosity_idx && this->get_timestep_number() > 0)
-                      reaction_rate_out->reaction_rates[q][c] = porosity_change / fluid_reaction_time_scale;
-                    else
-                      reaction_rate_out->reaction_rates[q][c] = 0.0;
-                  }
-                else
-                  {
-                    if (c == porosity_idx && this->get_timestep_number() > 0)
-                      reaction_rate_out->reaction_rates[q][c] = porosity_change / fluid_reaction_time_scale;
-                    else
-                      reaction_rate_out->reaction_rates[q][c] = 0.0;
-                  }
-
-              }
+          katz2003_model.calculate_reaction_rate_outputs(in, out);
+          katz2003_model.calculate_fluid_outputs(in, out);
         }
     }
 
