@@ -713,6 +713,9 @@ namespace aspect
                                "You have to choose it in such a way that it is smaller than the inverse of the "
                                "'Freezing rate' chosen in the material model, which is currently "
                                + Utilities::to_string(1.0/freezing_rate) + "."));
+         AssertThrow(this->introspection().compositional_name_exists("peridotite"),
+                          ExcMessage("Material model Katz 2003 Mantle Melting only "
+                                     "works if there is a compositional field called peridotite."));
       }
     }
   }
